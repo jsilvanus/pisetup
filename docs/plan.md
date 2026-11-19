@@ -2,11 +2,12 @@
 
 Status: plan only, nothing is built. Written 2026-11-19.
 
-`pisetup` sets up a whole Pi ecosystem install: it finds the compatible devices on the network and guides their setup, installs and configures the `pi*` apps, and (later) guides building the venue's 3D model. It has two front ends, a **CLI** and a **web setup UI**, over **one shared core**, so both do exactly the same things.
+`pisetup` is **venue-neutral**: it works for any venue running the Pi ecosystem (a church, a school hall, a theatre), not for one site. It sets up a whole Pi ecosystem install: it finds the compatible devices on the network and guides their setup, installs and configures the `pi*` apps, and (later) guides building the venue's 3D model. It has two front ends, a **CLI** and a **web setup UI**, over **one shared core**, so both do exactly the same things.
 
 ## 1. Rules this plan follows
 
-- **Public repo, no site data.** pisetup holds no IPs, host names, credentials or venue details. Everything site-specific is read from a *site profile* in the private `jsilvanus/keskuskirkko` repo (section 4).
+- **Public repo, no site data, no single venue.** pisetup holds no IPs, host names, credentials or venue details, and nothing in the core assumes one venue, one church or one device set. Everything site-specific is read from a *site profile* that each venue keeps in its own private repo or folder (section 4). The first venue's profile lives in private `jsilvanus/keskuskirkko`, but that is only an example of where a profile can come from.
+- **Venue differences are data or plugins, never core code.** Different gear (another switcher, another DSP, no AMX at all) means a profile that lists other devices and, where needed, another probe plugin. Church-specific content (hymns, liturgy tooling) is not pisetup's concern.
 - **Reuse, do not reinvent.** The app catalog (ports, health paths, env port variables) comes from piecosystem's registry (`ecosystem.manual.yaml` plus each repo's `package.json` `pi` block, merged by `scripts/generate-ecosystem.mjs`). Health checks reuse the logic of `scripts/ecosystem-health.mjs`. Service units are the generic `deploy/*.service` files each repo ships (user units, `%h/apps/<repo>`, `EnvironmentFile`). Backup and restore of config is `tools/pi-backup` (see the kirkonpi SD backup plan), not a new mechanism. The site profile schema is piecosystem's `docs/site-profile-spec.md` (`venue-profile.yaml`).
 - **Every app must work without pigateway.** pisetup installs apps independently; pigateway is a normal catalog entry, never a prerequisite.
 - **Deploy from `main` only.** Apps are git checkouts of `main` under `~/apps/<repo>`. pisetup never checks out a feature branch.
@@ -42,14 +43,14 @@ Read-only network discovery on the subnet from the profile, cheapest first:
 2. **Active scan** (opt-in, `pisetup discover --scan`): ping/ARP sweep of the profile subnet plus targeted port probes, rate-limited. Finds devices the profile does not list and suggests adding them.
 3. **Passive hints**: neighbour table, mDNS/SSDP where a device announces itself, switch MAC table via pipoe's SNMP read when pipoe is available.
 
-Each device type is a small **probe plugin** (`src/probes/<type>.js`): what to try, what a positive looks like, which pi* app owns it. Initial set, from the ecosystem map:
+Each device type is a small **probe plugin** (`src/probes/<type>.js`): what to try, what a positive looks like, which pi* app owns it. Initial set, from the first venue's equipment; a venue without a given device type simply omits it from its profile, and new types are added as plugins (including third-party ones loaded from a plugin directory):
 
 | Device type | Probe | Owning app |
 |---|---|---|
 | PTZ cameras | HTTP CGI identity, VISCA-over-IP reachable | picam / pigateway |
 | ATEM switcher | UDP 9910 handshake | piswitch / pigateway |
-| Atlona matrix | via the AMX master (the matrix is AMX-controlled only) | pigateway, keskuskirkko AMX |
-| AMX master | TCP 6501 reachable | pigateway |
+| Video matrix (for example Atlona) | its own control API, or via a control system such as AMX where the venue routes through one | pigateway, venue control system |
+| Control system (for example AMX), optional | control port reachable | pigateway |
 | Soundweb London | TCP 1023 | pisound |
 | PoE switch | SNMP read | pipoe |
 | Projectors | projector control port | pimatrix / pigateway |
@@ -74,13 +75,15 @@ From the catalog and the profile, pisetup builds a **role-based plan**: which ap
 Updates reuse the same steps (`pisetup update <app>`: fast-forward main, rebuild, restart, verify, roll back to the previous commit if verify fails). Config backup before changes uses `tools/pi-backup` when installed.
 
 ### 3.4 Placeholder: church 3D model
-Reserved, not planned yet. A calibration approach is likely coming and will make the scope clearer. Known today, so the hook exists without committing to a design: the model lives in pispace (venue JSON), its editor is church-3d-mapper, and the venue data stays in private keskuskirkko. pisetup will later add a "3D model" wizard section that checks pispace and the editor are installed and pointed at the right data, then hands over to the calibration flow. No steps, schema or UI in phases 0 to 4.
+Reserved, not planned yet. A calibration approach is likely coming and will make the scope clearer. Known today, so the hook exists without committing to a design: the model lives in pispace (venue JSON), its editor is church-3d-mapper, and each venue's model data stays in that venue's own private repo. pisetup will later add a "3D model" wizard section that checks pispace and the editor are installed and pointed at the right data, then hands over to the calibration flow. No steps, schema or UI in phases 0 to 4.
 
 ## 4. Site profile (how pisetup reads site data)
 
-- The profile is `venue-profile.yaml` (schema in piecosystem `site-profile-spec.md`) in private `jsilvanus/keskuskirkko`. pisetup never stores it in this repo.
-- **Source**, in order: `--profile <path>` or `PISETUP_PROFILE_PATH` (a local checkout of keskuskirkko, for example on the operator PC); `PISETUP_PROFILE_URL` (pigateway's `/api/v1/venue/profile` once it is up); or a clone/pull of the private repo with the operator's existing GitHub credentials. The Pi gets no new GitHub credential; on the Pi the profile arrives by copy from the operator PC.
-- The profile is read-only input. pisetup may *propose* additions (a newly discovered device) as a patch file for the operator to commit to keskuskirkko; it never writes to the private repo itself.
+- Each venue has one profile, `venue-profile.yaml` (schema in piecosystem `site-profile-spec.md`, versioned with `schema:`), kept in that venue's own private repo or folder. The first venue's is in private `jsilvanus/keskuskirkko`. pisetup never stores a real profile in this repo.
+- **Several venues on one machine** (for example an integrator maintaining a few sites): `pisetup venue add|list|use` keeps named profile sources in the local config, and every command takes `--venue <name>`. State and secrets are kept per venue, so one site's data never mixes with another's.
+- **New venue from scratch:** `pisetup venue init` runs the discovery wizard and writes a starter profile for the operator to review and commit to their own repo, so a venue without a profile can still begin.
+- **Source**, in order: `--profile <path>` or `PISETUP_PROFILE_PATH` (a local checkout of the venue repo, for example on the operator PC); `PISETUP_PROFILE_URL` (pigateway's `/api/v1/venue/profile` once it is up); or a clone/pull of the private repo with the operator's existing Git credentials. The Pi gets no new GitHub credential; on the Pi the profile arrives by copy from the operator PC.
+- The profile is read-only input. pisetup may *propose* additions (a newly discovered device) as a patch file for the operator to commit to the venue repo; it never writes to that repo itself.
 - **Secrets** are references in the profile (`secret:<name>`), resolved from an environment variable or a local secret file outside any repo. Resolved values never reach logs, the state file, the web UI or discovery output.
 - A **site-less mode** works with a bundled synthetic example profile (invented addresses) for tests and demos.
 - Only generic examples live in this repo's docs and tests. A real address in a pisetup PR is a bug.
@@ -89,7 +92,7 @@ Reserved, not planned yet. A calibration approach is likely coming and will make
 
 Each phase ends with something usable. CLI and web UI land together per phase, since the web UI only renders core results.
 
-**Phase 0: skeleton.** Repo layout, ESM package, step model, CLI shell, `serve` shell, OpenAPI, synthetic example profile, test harness with fake devices, catalog loader reading piecosystem's generated registry. No device or Pi access.
+**Phase 0: skeleton.** Multi-venue from the start: profile loading by venue name, per-venue state directory. Repo layout, ESM package, step model, CLI shell, `serve` shell, OpenAPI, synthetic example profile, test harness with fake devices, catalog loader reading piecosystem's generated registry. No device or Pi access.
 
 **Phase 1: read-only status.** `pisetup status` / `check`: profile load and validation, catalog, host prerequisites, app presence and versions, health endpoints, port clashes. The web UI shows the same table. Safe to run anywhere.
 
@@ -111,9 +114,12 @@ Defaults are recommended; the plan works with them unless told otherwise.
 2. **Web UI hosting.** Recommended: local on the operator PC. Alternative: also served through the Pi's nginx behind the picontrol PIN.
 3. **Writing device settings in phase 4.** Recommended: guide and verify by default, applies only behind a per-action confirm.
 
+4. **Profile schema ownership.** The venue profile schema currently lives in piecosystem. Recommended: keep it there, versioned, and have pisetup validate against it, so other venues have one documented format.
+
 ## 7. Testing and safety
 
-- `node:test`, no real network. Probes run against fake UDP/TCP/HTTP servers like the sibling repos.
+- `node:test`, no real network. Tests run against at least two synthetic venues with different device sets, so single-venue assumptions fail the build.
+- Fake devices only. Probes run against fake UDP/TCP/HTTP servers like the sibling repos.
 - Install steps default to dry-run, covered by tests (plan output compared, nothing written).
 - Everything is unverified against real devices until run on site; docs say so when a probe or applier is added.
 - No tokens, keys or community strings in logs; env files written mode 600; the web UI never shows resolved secrets.

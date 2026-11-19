@@ -1,6 +1,6 @@
 # pisetup
 
-Guided setup for the Pi ecosystem: discover the compatible devices on the network and guide their setup, install and configure the `pi*` apps, and later guide building the venue's 3D model. One shared core with two front ends: a CLI and a web setup UI.
+Guided setup for the Pi ecosystem at any venue: discover the compatible devices on the network and guide their setup, install and configure the `pi*` apps, and later guide building the venue's 3D model. One shared core with two front ends: a CLI and a web setup UI.
 
 Status: planning. See [docs/plan.md](docs/plan.md). Nothing is built yet.
 

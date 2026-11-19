@@ -79,6 +79,7 @@ Reserved, not planned yet. A calibration approach is likely coming and will make
 
 ## 4. Site profile (how pisetup reads site data)
 
+- **Decision (Juha, 2026-11-19): the profile format lives in piecosystem.** The schema, its version and the documented example are owned by piecosystem (`docs/site-profile-spec.md`); every `pi*` app and pisetup validate against that one definition, so all venues share one format. Real profiles (the data) stay in each venue's own private repo, never in piecosystem or pisetup. If pisetup needs a field the schema lacks, the change goes to piecosystem first. pisetup ships only a generated copy of the schema for offline validation and the synthetic example profiles for tests.
 - Each venue has one profile, `venue-profile.yaml` (schema in piecosystem `site-profile-spec.md`, versioned with `schema:`), kept in that venue's own private repo or folder. The first venue's is in private `jsilvanus/keskuskirkko`. pisetup never stores a real profile in this repo.
 - **Several venues on one machine** (for example an integrator maintaining a few sites): `pisetup venue add|list|use` keeps named profile sources in the local config, and every command takes `--venue <name>`. State and secrets are kept per venue, so one site's data never mixes with another's.
 - **New venue from scratch:** `pisetup venue init` runs the discovery wizard and writes a starter profile for the operator to review and commit to their own repo, so a venue without a profile can still begin.
@@ -114,7 +115,6 @@ Defaults are recommended; the plan works with them unless told otherwise.
 2. **Web UI hosting.** Recommended: local on the operator PC. Alternative: also served through the Pi's nginx behind the picontrol PIN.
 3. **Writing device settings in phase 4.** Recommended: guide and verify by default, applies only behind a per-action confirm.
 
-4. **Profile schema ownership.** The venue profile schema currently lives in piecosystem. Recommended: keep it there, versioned, and have pisetup validate against it, so other venues have one documented format.
 
 ## 7. Testing and safety
 
